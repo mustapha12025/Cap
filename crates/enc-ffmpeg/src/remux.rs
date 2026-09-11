@@ -79,9 +79,33 @@ pub fn concatenate_video_fragments(fragments: &[PathBuf], output: &Path) -> Resu
     result
 }
 
+// FFmpeg cannot open Windows verbatim (`\\?\`-prefixed) paths, so hand it the
+// regular form for concat work. Rust std accepts either form, so only
+// FFmpeg-facing strings go through here.
+fn ffmpeg_visible_path(path: &Path) -> PathBuf {
+    #[cfg(windows)]
+    {
+        if let Some(text) = path.as_os_str().to_str()
+            && let Some(unc) = text.strip_prefix(r"\\?\UNC\")
+        {
+            return PathBuf::from(format!(r"\\{unc}"));
+        }
+        if let Some(text) = path.as_os_str().to_str()
+            && let Some(stripped) = text.strip_prefix(r"\\?\")
+        {
+            return PathBuf::from(stripped);
+        }
+        path.to_path_buf()
+    }
+    #[cfg(not(windows))]
+    {
+        path.to_path_buf()
+    }
+}
+
 fn concat_fragment_entry(fragment: &Path, concat_list: &Path) -> Result<String, RemuxError> {
-    let fragment = std::path::absolute(fragment)?;
-    let concat_list = std::path::absolute(concat_list)?;
+    let fragment = ffmpeg_visible_path(&std::path::absolute(fragment)?);
+    let concat_list = ffmpeg_visible_path(&std::path::absolute(concat_list)?);
     let directory = concat_list.parent().ok_or_else(|| {
         std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
@@ -121,7 +145,8 @@ fn open_input_with_format(
             return Err(RemuxError::ConcatDemuxerNotFound);
         }
 
-        let path_text = path.to_str().ok_or_else(|| {
+        let visible_path = ffmpeg_visible_path(path);
+        let path_text = visible_path.to_str().ok_or_else(|| {
             RemuxError::Io(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
                 "FFmpeg input path is not valid UTF-8",
