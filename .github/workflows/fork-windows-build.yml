@@ -50,6 +50,11 @@ jobs:
           maximum-size: 24GB
           disk-root: "D:"
 
+      - name: Disable updater signing for unsigned fork build
+        shell: bash
+        run: |
+          node -e "const fs=require('fs');const p='apps/desktop/src-tauri/tauri.prod.conf.json';const j=JSON.parse(fs.readFileSync(p,'utf8'));j.plugins=j.plugins||{};j.plugins.updater={active:false,pubkey:''};fs.writeFileSync(p,JSON.stringify(j,null,2));console.log(fs.readFileSync(p,'utf8'))"
+
       - name: Build app
         working-directory: apps/desktop
         run: bun run build:tauri --target x86_64-pc-windows-msvc --config src-tauri/tauri.prod.conf.json --bundles nsis
