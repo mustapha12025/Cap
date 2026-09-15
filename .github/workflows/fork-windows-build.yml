@@ -51,19 +51,12 @@ jobs:
           disk-root: "D:"
 
       - name: Disable updater signing for unsigned fork build
+        working-directory: apps/desktop
         shell: bash
         run: |
-          set -e
-          KEY="$RUNNER_TEMP/tauri-fork.key"
-          bun run --cwd apps/desktop tauri signer generate -w "$KEY" -f --ci
-          PUBKEY="$(cat "$KEY.pub")"
-          PUBKEY="$PUBKEY" node -e "const fs=require('fs');const p='apps/desktop/src-tauri/tauri.prod.conf.json';const j=JSON.parse(fs.readFileSync(p,'utf8'));j.plugins=j.plugins||{};j.plugins.updater={active:false,pubkey:process.env.PUBKEY||''};j.bundle=j.bundle||{};j.bundle.createUpdaterArtifacts=false;fs.writeFileSync(p,JSON.stringify(j,null,2));console.log(fs.readFileSync(p,'utf8'))"
-          {
-            echo "TAURI_SIGNING_PRIVATE_KEY<<TAURIKEYEOF"
-            cat "$KEY"
-            echo "TAURIKEYEOF"
-          } >> "$GITHUB_ENV"
-          rm -f "$KEY" "$KEY.pub"
+          jq '.plugins.updater.active = false | .plugins.updater.pubkey = "" | .bundle.createUpdaterArtifacts = false' src-tauri/tauri.conf.json > tmp.json && mv tmp.json src-tauri/tauri.conf.json
+          jq '.plugins.updater.active = false | .plugins.updater.pubkey = "" | .bundle.createUpdaterArtifacts = false' src-tauri/tauri.prod.conf.json > tmp.json && mv tmp.json src-tauri/tauri.prod.conf.json
+          grep -A2 '"updater"' src-tauri/tauri.prod.conf.json
 
       - name: Build app
         working-directory: apps/desktop
