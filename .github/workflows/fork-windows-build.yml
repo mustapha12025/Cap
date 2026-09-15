@@ -1,0 +1,72 @@
+name: fork-windows-build
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust setup
+        uses: dtolnay/rust-toolchain@1.88.0
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - uses: ./.github/actions/setup-rust-cache
+        with:
+          target: x86_64-pc-windows-msvc
+
+      - uses: ./.github/actions/setup-js
+
+      - name: Create .env file
+        shell: bash
+        run: |
+          {
+            echo "appVersion=0.6.1"
+            echo "VITE_ENVIRONMENT=production"
+            echo "NEXT_PUBLIC_WEB_URL=https://cap.so"
+            echo "NEXTAUTH_URL=https://cap.so"
+            echo "VITE_SERVER_URL=https://cap.so"
+            echo "RUST_TARGET_TRIPLE=x86_64-pc-windows-msvc"
+          } >> .env
+
+      - name: Run cap-setup
+        shell: bash
+        run: pnpm -w cap-setup
+        env:
+          RUST_TARGET_TRIPLE: x86_64-pc-windows-msvc
+
+      - name: Build desktop binaries
+        shell: bash
+        run: ./scripts/build-desktop-binaries.sh x86_64-pc-windows-msvc
+
+      - name: Increase pagefile size
+        uses: al-cheb/configure-pagefile-action@a3b6ebd6b634da88790d9c58d4b37a7f4a7b8708 # v1.4
+        with:
+          minimum-size: 16GB
+          maximum-size: 24GB
+          disk-root: "D:"
+
+      - name: Build app
+        working-directory: apps/desktop
+        run: pnpm build:tauri --target x86_64-pc-windows-msvc --config src-tauri/tauri.prod.conf.json --bundles nsis
+        env:
+          CI: false
+          RUST_TARGET_TRIPLE: x86_64-pc-windows-msvc
+
+      - name: Verify installer
+        shell: pwsh
+        run: |
+          $installers = Get-ChildItem -Path "target/x86_64-pc-windows-msvc/release/bundle/nsis" -Filter *.exe
+          if (-not $installers) {
+            throw "No Windows NSIS installer was produced."
+          }
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-nsis-installer
+          path: target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
+          if-no-files-found: error
