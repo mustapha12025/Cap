@@ -26,6 +26,7 @@ jobs:
           {
             echo "appVersion=0.6.1"
             echo "VITE_ENVIRONMENT=production"
+            echo "CAP_DESKTOP_SENTRY_URL=https://6a3b6a09e6ae976c2ad6fff710e88748@o4506859771527168.ingest.us.sentry.io/4508330917101568"
             echo "NEXT_PUBLIC_WEB_URL=https://cap.so"
             echo "NEXTAUTH_URL=https://cap.so"
             echo "VITE_SERVER_URL=https://cap.so"
@@ -34,7 +35,7 @@ jobs:
 
       - name: Run cap-setup
         shell: bash
-        run: pnpm -w cap-setup
+        run: bun run cap-setup
         env:
           RUST_TARGET_TRIPLE: x86_64-pc-windows-msvc
 
@@ -51,7 +52,7 @@ jobs:
 
       - name: Build app
         working-directory: apps/desktop
-        run: pnpm build:tauri --target x86_64-pc-windows-msvc --config src-tauri/tauri.prod.conf.json --bundles nsis
+        run: bun run build:tauri --target x86_64-pc-windows-msvc --config src-tauri/tauri.prod.conf.json --bundles nsis
         env:
           CI: false
           RUST_TARGET_TRIPLE: x86_64-pc-windows-msvc
