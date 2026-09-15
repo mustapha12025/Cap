@@ -223,19 +223,40 @@ async function main() {
 				"Visual Studio C++ build tools installation was not found",
 			);
 
-		const libclangPath = path.join(
+		let libclangPath = path.join(
 			vcInstallDir.trim(),
 			"VC/Tools/LLVM/x64/bin/libclang.dll",
 		);
-		if (!(await fileExists(libclangPath)))
-			throw new Error(
-				`Visual Studio LLVM libclang was not found at ${libclangPath}`,
+		if (!(await fileExists(libclangPath))) {
+			const clangExePath = await findExecutable("clang.exe");
+			const clangLibPath = clangExePath
+				? path.join(path.dirname(clangExePath), "libclang.dll")
+				: null;
+			const fallbackCandidates = [
+				path.join(vcInstallDir.trim(), "VC/Tools/Llvm/bin/libclang.dll"),
+				"C:\\Program Files\\LLVM\\bin\\libclang.dll",
+				path.join(process.env.LOCALAPPDATA ?? "", "LLVM/bin/libclang.dll"),
+				await findExecutable("libclang.dll"),
+				clangLibPath,
+			].filter(Boolean);
+			for (const candidate of fallbackCandidates) {
+				if (candidate && (await fileExists(candidate))) {
+					libclangPath = candidate;
+					console.log(`Using fallback libclang at ${libclangPath}`);
+					break;
+				}
+			}
+		}
+		if (!(await fileExists(libclangPath))) {
+			console.warn(
+				`Visual Studio LLVM libclang was not found at ${libclangPath}. Continuing without LIBCLANG_PATH - bindgen will search PATH. Install LLVM via 'winget install LLVM.LLVM' or VS BuildTools LLVM component if build fails.`,
 			);
-
-		cargoConfigContents += `LIBCLANG_PATH = "${libclangPath.replaceAll(
-			"\\",
-			"/",
-		)}"\n`;
+		} else {
+			cargoConfigContents += `LIBCLANG_PATH = "${libclangPath.replaceAll(
+				"\\",
+				"/",
+			)}"\n`;
+		}
 
 		const cmakePath = path.join(
 			vcInstallDir.trim(),

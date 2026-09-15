@@ -374,7 +374,12 @@ async fn render_preview_frame(
     let duration_seconds = total_duration;
     let fps_f64 = settings.fps as f64;
     let total_frames = (duration_seconds * fps_f64).ceil() as u32;
-    let total_pixels = (settings.resolution_base.x * settings.resolution_base.y) as f64;
+    // Use the actual rendered dimensions (orientation-corrected via
+    // get_output_size) rather than the requested resolution_base, so the
+    // estimate matches the real file. Requesting landscape 1920x1080 for a
+    // vertical project renders 1080x1920 (same pixel count), but padding /
+    // aspect-fit can make them differ (e.g. 608x1080 was estimated as 79MB).
+    let total_pixels = (width * height) as f64;
     let estimated_size_mb = if settings.cursor_only {
         let total_frames_f64 = (duration_seconds * fps_f64).ceil();
         estimate_cursor_only_size_mb(total_pixels, total_frames_f64)

@@ -1813,8 +1813,17 @@ fn export_estimates_for_duration(
             let audio_bitrate = 192_000.0;
             let total_bitrate = video_bitrate + audio_bitrate;
             let encoder_efficiency = 0.5;
-            let size_mb =
-                (total_bitrate * encoder_efficiency * duration_seconds) / (8.0 * 1024.0 * 1024.0);
+            // `optimize_filesize` (CRF/libx264) ignores the bpp bitrate target
+            // and encodes by quality instead, producing much smaller files
+            // (especially for screen content). Without this the UI shows the
+            // same ~79MB estimate for ON and OFF while ON yields ~7MB.
+            let crf_discount = if mp4_settings.optimize_filesize {
+                0.45
+            } else {
+                1.0
+            };
+            let size_mb = (total_bitrate * encoder_efficiency * crf_discount * duration_seconds)
+                / (8.0 * 1024.0 * 1024.0);
 
             let effective_render_fps = match (width, height) {
                 (w, _) if w >= 3840 => 175.0,
@@ -2163,7 +2172,9 @@ async fn generate_export_preview_inner(
 
     let jpeg_base64 = STANDARD.encode(&jpeg_buffer);
 
-    let total_pixels = (settings.resolution_base.x * settings.resolution_base.y) as f64;
+    // Actual rendered pixels (orientation/aspect corrected), not the requested
+    // resolution_base, so the estimate matches the real file.
+    let total_pixels = (width * height) as f64;
     let fps_f64 = settings.fps as f64;
 
     let metadata = get_video_metadata(project_path.clone()).await?;
@@ -2729,7 +2740,9 @@ async fn generate_export_preview_fast_inner(
 
     let jpeg_base64 = STANDARD.encode(&jpeg_buffer);
 
-    let total_pixels = (settings.resolution_base.x * settings.resolution_base.y) as f64;
+    // Actual rendered pixels (orientation/aspect corrected), not the requested
+    // resolution_base, so the estimate matches the real file.
+    let total_pixels = (width * height) as f64;
     let fps_f64 = settings.fps as f64;
 
     let duration_seconds = export_estimate_duration(&project_config, editor.recordings.duration());

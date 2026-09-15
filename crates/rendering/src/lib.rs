@@ -3072,15 +3072,38 @@ impl ProjectUniforms {
         }
     }
 
+    /// Resolution requested by the export UI is always authored landscape
+    /// (1280x720, 1920x1080, 3840x2160), but the project base can be portrait
+    /// (e.g. Vertical 9:16 for TikTok/Instagram) or square. "1080p" means
+    /// 1080px on the short side: 1920x1080 landscape, 1080x1920 portrait,
+    /// 1080x1080 square. Without this, a vertical project exported at
+    /// "1080p" fit a 1920x1080 box with min-scale and produced ~608x1080
+    /// blurry output instead of 1080x1920.
+    pub fn oriented_resolution_base(
+        options: &RenderOptions,
+        project: &ProjectConfiguration,
+        resolution_base: XY<u32>,
+    ) -> XY<u32> {
+        let (base_width, base_height) = Self::get_base_size(options, project);
+        let base_portrait = base_width < base_height;
+        let requested_portrait = resolution_base.x < resolution_base.y;
+        if base_portrait != requested_portrait {
+            XY::new(resolution_base.y, resolution_base.x)
+        } else {
+            resolution_base
+        }
+    }
+
     pub fn get_output_size(
         options: &RenderOptions,
         project: &ProjectConfiguration,
         resolution_base: XY<u32>,
     ) -> (u32, u32) {
         let (base_width, base_height) = Self::get_base_size(options, project);
+        let oriented = Self::oriented_resolution_base(options, project, resolution_base);
 
-        let width_scale = resolution_base.x as f32 / base_width as f32;
-        let height_scale = resolution_base.y as f32 / base_height as f32;
+        let width_scale = oriented.x as f32 / base_width as f32;
+        let height_scale = oriented.y as f32 / base_height as f32;
         let scale = width_scale.min(height_scale);
 
         let scaled_width = ((base_width as f32 * scale) as u32 + 3) & !3;
@@ -4915,6 +4938,38 @@ mod tests {
 
         assert_eq!((width, height), (2688, 1512));
         assert_eq!(width * 1080, height * 1920);
+    }
+
+    #[test]
+    fn portrait_request_matches_portrait_base_for_tiktok() {
+        // Vertical 9:16 project (TikTok/Instagram) exported at landscape
+        // "1080p" (1920x1080) must produce 1080x1920, not a min-scale fit
+        // like 608x1080.
+        let options = render_options(1080, 1920);
+        let project = ProjectConfiguration {
+            aspect_ratio: Some(AspectRatio::Vertical),
+            ..ProjectConfiguration::default()
+        };
+        let (base_w, base_h) = ProjectUniforms::get_base_size(&options, &project);
+        assert!(
+            base_w < base_h,
+            "base should be portrait: {base_w}x{base_h}"
+        );
+        let oriented =
+            ProjectUniforms::oriented_resolution_base(&options, &project, XY::new(1920, 1080));
+        assert_eq!(oriented, XY::new(1080, 1920));
+        let (out_w, out_h) =
+            ProjectUniforms::get_output_size(&options, &project, XY::new(1920, 1080));
+        assert_eq!((out_w, out_h), (1080, 1920));
+        // Landscape projects are untouched.
+        let landscape_options = render_options(1920, 1080);
+        let landscape = ProjectConfiguration::default();
+        let (out_w, out_h) =
+            ProjectUniforms::get_output_size(&landscape_options, &landscape, XY::new(1920, 1080));
+        assert!(
+            out_w >= out_h,
+            "landscape should stay landscape: {out_w}x{out_h}"
+        );
     }
 
     #[test]
