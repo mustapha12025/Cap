@@ -53,7 +53,17 @@ jobs:
       - name: Disable updater signing for unsigned fork build
         shell: bash
         run: |
-          node -e "const fs=require('fs');const p='apps/desktop/src-tauri/tauri.prod.conf.json';const j=JSON.parse(fs.readFileSync(p,'utf8'));j.plugins=j.plugins||{};j.plugins.updater={active:false,pubkey:''};fs.writeFileSync(p,JSON.stringify(j,null,2));console.log(fs.readFileSync(p,'utf8'))"
+          set -e
+          KEY="$RUNNER_TEMP/tauri-fork.key"
+          bun run --cwd apps/desktop tauri signer generate -w "$KEY" -f --ci
+          PUBKEY="$(cat "$KEY.pub")"
+          PUBKEY="$PUBKEY" node -e "const fs=require('fs');const p='apps/desktop/src-tauri/tauri.prod.conf.json';const j=JSON.parse(fs.readFileSync(p,'utf8'));j.plugins=j.plugins||{};j.plugins.updater={active:false,pubkey:process.env.PUBKEY||''};j.bundle=j.bundle||{};j.bundle.createUpdaterArtifacts=false;fs.writeFileSync(p,JSON.stringify(j,null,2));console.log(fs.readFileSync(p,'utf8'))"
+          {
+            echo "TAURI_SIGNING_PRIVATE_KEY<<TAURIKEYEOF"
+            cat "$KEY"
+            echo "TAURIKEYEOF"
+          } >> "$GITHUB_ENV"
+          rm -f "$KEY" "$KEY.pub"
 
       - name: Build app
         working-directory: apps/desktop
