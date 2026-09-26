@@ -65,12 +65,30 @@ jobs:
           CI: false
           RUST_TARGET_TRIPLE: x86_64-pc-windows-msvc
 
-      - name: Verify installer
+      - name: Verify Windows installer contents
         shell: pwsh
         run: |
           $installers = Get-ChildItem -Path "target/x86_64-pc-windows-msvc/release/bundle/nsis" -Filter *.exe
           if (-not $installers) {
             throw "No Windows NSIS installer was produced."
+          }
+          $sevenZip = Get-Command 7z -ErrorAction Stop
+          $requiredFiles = @(
+            "Cap.exe", "cap-muxer.exe", "cap-exporter.exe", "cap-cli.exe", "cap-gpui.exe",
+            "avcodec-61.dll", "avdevice-61.dll", "avfilter-10.dll", "avformat-61.dll",
+            "avutil-59.dll", "postproc-58.dll", "swresample-5.dll", "swscale-8.dll",
+            "dxcompiler.dll", "dxil.dll", "onnxruntime.dll", "onnxruntime_providers_shared.dll"
+          )
+          foreach ($installer in $installers) {
+            $contents = & $sevenZip.Source l -slt $installer.FullName
+            if ($LASTEXITCODE -ne 0) {
+              throw "Could not inspect Windows installer '$($installer.Name)'."
+            }
+            foreach ($file in $requiredFiles) {
+              if ($contents -notcontains "Path = $file") {
+                throw "Windows installer '$($installer.Name)' is missing bundled '$file'."
+              }
+            }
           }
 
       - name: Upload installer
